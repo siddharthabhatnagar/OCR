@@ -1,17 +1,28 @@
 {
-  "name": "docling-ocr-api",
-  "version": "0.1.0",
+  "name": "table-ocr-vercel",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod",
-    "test": "python -m pytest tests/"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "pythonia": "^1.0.0"
+    "next": "14.2.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@huggingface/transformers": "^3.0.2",
+    "tesseract.js": "^5.1.1",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -1,19 +1,11 @@
-# Dependencies
-__pycache__/
-*.pyc
-*.pyo
-
-# Vercel
-.vercel/
-
-# Local secrets
+node_modules
+.next
+out
 .env
 .env.local
-
-# Samples (for testing)
-samples/
-
-# IDE
-.vscode/
-.idea/
-*.swp
+.env.production
+.vercel
+*.log
+.DS_Store
+next-env.d.ts
+.tsbuildinfo
