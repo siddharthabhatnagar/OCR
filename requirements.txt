@@ -1,0 +1,49 @@
+# =============================================================================
+# HF Spaces Gradio SDK pre-installs these — DO NOT pin them here (causes
+# "Cannot install X==A and X==B because these package versions have
+# conflicting dependencies" build errors):
+#   - torch          (HF base image has 2.10.0)
+#   - gradio         (HF injects gradio[oauth]==5.9.1)
+#   - spaces         (HF injects spaces==0.50.4)
+#   - uvicorn        (HF injects uvicorn>=0.14.0)
+#   - websockets     (HF injects websockets>=10.4)
+#   - huggingface_hub (pre-installed, >=1.0)
+#   - datasets, protobuf, click, hf-transfer (pre-installed)
+# =============================================================================
+
+# Web framework (uvicorn is auto-injected by HF Spaces)
+fastapi==0.115.6
+python-multipart==0.0.20
+orjson==3.10.12
+
+# Model inference (torch is pre-installed; torchvision version must match)
+torchvision
+transformers==4.57.1
+accelerate>=1.1.1
+sentencepiece==0.2.0
+hf_transfer==0.1.8
+
+# Required by Unlimited-OCR's custom modeling_*.py (trust_remote_code=True)
+addict==2.4.0
+easydict==1.13
+einops==0.8.2
+timm>=1.0.11
+pyyaml==6.0.2
+safetensors>=0.4.5
+jsonschema==4.23.0
+matplotlib==3.10.8
+tqdm==4.67.1
+packaging==24.2
+requests==2.32.3
+psutil>=5.9.0
+
+# PDF / image processing
+PyMuPDF==1.24.14
+Pillow==11.0.0
+pdf2image==1.17.0
+
+# Utilities
+pydantic==2.10.4
+pydantic-settings==2.7.0
+httpx==0.28.1
+loguru==0.7.3
