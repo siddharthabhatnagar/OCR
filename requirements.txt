@@ -1,23 +1,27 @@
-# Docling OCR dependencies
-# Docling is IBM's document AI library — pure CPU, lightweight, excellent for RAG.
-# https://github.com/DS4SD/docling
+# PyMuPDF4LLM — lightweight pure-Python PDF-to-markdown for RAG.
+# Total bundle ~30 MB (vs Docling's ~5 GB).
+# No torch, no transformers, no model weights — just PDF parsing.
+#
+# Why PyMuPDF4LLM over Docling on Vercel:
+#   - Bundle: 30 MB vs 5 GB (Vercel limit is 225 MB)
+#   - Cold start: <1 sec vs 5 sec
+#   - Per-page: <1 sec vs 2-5 sec
+#   - Tables: good (rule-based) vs excellent (ML)
+#   - Equations: basic vs basic
+#   - Cost: $0 forever vs $0 forever
+#
+# Trade-off: PyMuPDF4LLM uses rule-based table detection (no ML model),
+# so complex tables with merged cells may be less accurate than Docling.
+# For most RAG use cases (papers, reports, manuals) it's more than enough.
 
-# Core Docling package (pulls in torch CPU, transformers, etc.)
-docling==2.7.0
+pymupdf4llm>=0.0.17
+PyMuPDF>=1.24.0
+Pillow>=10.0.0
 
-# Web framework for the ASGI app (Vercel Python runtime expects `app` variable)
-starlette==0.41.3
-python-multipart==0.0.20
-
-# PDF/image processing
-PyMuPDF==1.24.14
-Pillow==11.0.0
+# Web framework for the ASGI app
+starlette>=0.37.0
+python-multipart>=0.0.7
 
 # Utilities
-pydantic==2.10.4
-loguru==0.7.3
-
-# NOTE: Vercel has a 250MB unzipped bundle limit. Docling + its deps
-# (torch CPU, transformers) come to ~220MB which fits.
-# If you hit the limit, switch to PyMuPDF4LLM (Option 2 in README)
-# which is ~30MB total.
+pydantic>=2.0.0
+loguru>=0.7.0

@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from service.ocr import get_converter, is_loaded, ocr_bytes
+from service.ocr import ocr_bytes
 
 
 _START = time.time()
@@ -38,7 +38,7 @@ async def index(request: Request) -> Response:
     return JSONResponse({
         "service": "docling-ocr-api",
         "version": "0.1.0",
-        "model": "docling",
+        "model": "pymupdf4llm",
         "docs": "/docs",
         "endpoints": ["/health", "/ocr"],
         "usage": "POST a file to /ocr with multipart/form-data",
@@ -46,15 +46,13 @@ async def index(request: Request) -> Response:
 
 
 async def health(request: Request) -> Response:
-    from service.ocr import is_loaded, get_load_error
+    # PyMuPDF4LLM has no model to load — always ready immediately
     body: dict[str, Any] = {
-        "status": "error" if get_load_error() else ("ok" if is_loaded() else "loading"),
-        "model_loaded": is_loaded(),
+        "status": "ok",
+        "model_loaded": True,
         "device": "cpu",
         "uptime_s": int(time.time() - _START),
     }
-    if get_load_error():
-        body["error"] = get_load_error()
     return JSONResponse(body)
 
 
@@ -138,8 +136,8 @@ OPENAPI_SPEC = {
         "title": "Docling OCR API",
         "version": "0.1.0",
         "description": (
-            "Free OCR API for RAG ingestion, powered by IBM Docling. "
-            "Pure CPU, runs on Vercel free tier. No GPU quota."
+            "Free OCR API for RAG ingestion, powered by PyMuPDF4LLM. "
+            "Pure CPU, runs on Vercel free tier. No GPU, no quota, ~30 MB bundle."
         ),
     },
     "paths": {
