@@ -14,8 +14,14 @@
 # so complex tables with merged cells may be less accurate than Docling.
 # For most RAG use cases (papers, reports, manuals) it's more than enough.
 
-pymupdf4llm>=0.0.17
-PyMuPDF>=1.24.0
+# IMPORTANT: pin pymupdf4llm to a version BEFORE it started pulling in
+# pymupdf-layout (which drags in onnxruntime + networkx + numpy, ~200MB
+# of ML deps for layout detection you don't need). Newer pymupdf4llm
+# (>=1.x) resolves to that heavy stack even though the code here never
+# touches it. This pin keeps the bundle ~90-100MB, well under Vercel's
+# 225MB function limit.
+pymupdf4llm==0.0.17
+PyMuPDF>=1.24.0,<1.28.0
 Pillow>=10.0.0
 
 # Web framework for the ASGI app
