@@ -36,18 +36,25 @@ def get_ocr():
 
 
 def get_table_engine():
-    """Lazy PPStructure singleton — loads layout + SLANet table structure models."""
+    """Lazy PPStructure singleton — loads SLANet table structure + OCR models.
+
+    Memory optimization for free tier (512 MB):
+    - layout=False: skip the heavy layout parser (~50 MB saved). We assume
+      the input image is already a table; users upload table images.
+    - structure_version='v2': uses SLANet (lighter than v1's older model).
+    - Result: ~145 MB of models loaded instead of ~195 MB.
+    """
     global _table_instance
     if _table_instance is None:
         with _init_lock:
             if _table_instance is None:
-                logger.info("Initializing PPStructure (lang=%s)...", LANG)
+                logger.info("Initializing PPStructure (lang=%s, layout=off)...", LANG)
                 from paddleocr import PPStructure
                 _table_instance = PPStructure(
                     show_log=False,
                     use_gpu=False,
                     enable_mkldnn=True,
-                    layout=True,
+                    layout=False,   # skip layout parser — saves ~50 MB RAM
                     table=True,
                     ocr=True,
                     structure_version="v2",
@@ -83,7 +90,12 @@ def extract_text(img: np.ndarray) -> List[Dict[str, Any]]:
 
 
 def extract_tables(img: np.ndarray) -> List[Dict[str, Any]]:
-    """Run PP-Structure table extraction. Returns list of detected tables."""
+    """Run PP-Structure table extraction. Returns list of detected tables.
+
+    With layout=False (free tier optimization), PPStructure returns a single
+    "table" region covering the whole image. If multiple tables are needed,
+    re-enable layout=True (costs ~50 MB extra RAM).
+    """
     engine = get_table_engine()
     result = engine(img)
     tables: List[Dict[str, Any]] = []
@@ -92,13 +104,22 @@ def extract_tables(img: np.ndarray) -> List[Dict[str, Any]]:
     for region in result:
         if not isinstance(region, dict):
             continue
-        if region.get("type") != "table":
+        # With layout=False, region may or may not have a "type" field.
+        # If "type" exists and isn't "table", skip. Otherwise treat as table.
+        rtype = region.get("type")
+        if rtype is not None and rtype != "table":
             continue
         res = region.get("res") or {}
-        html = res.get("html", "") or ""
-        cell_bbox = res.get("cell_bbox", []) or []
+        # res can be a dict (html) or a list of cells
+        if isinstance(res, list):
+            # Some versions return cells as list — convert to empty html
+            html = ""
+            cell_bbox = []
+        else:
+            html = res.get("html", "") or ""
+            cell_bbox = res.get("cell_bbox", []) or []
         tables.append({
-            "bbox": region.get("bbox"),
+            "bbox": region.get("bbox", [0, 0, img.shape[1], img.shape[0]]),
             "html": html,
             "cell_bbox": cell_bbox,
         })

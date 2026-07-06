@@ -1,5 +1,6 @@
 """FastAPI service for PaddleOCR table extraction."""
 import os
+import gc
 import time
 import logging
 
@@ -107,6 +108,9 @@ async def ocr_endpoint(file: UploadFile = File(...)):
     start = time.time()
     items = extract_text(img)
     elapsed = int((time.time() - start) * 1000)
+    # Free image memory aggressively — important on 512 MB free tier
+    del img, content
+    gc.collect()
     return {
         "items": items,
         "count": len(items),
@@ -122,6 +126,8 @@ async def table_endpoint(file: UploadFile = File(...)):
     start = time.time()
     tables = extract_tables(img)
     elapsed = int((time.time() - start) * 1000)
+    del img, content
+    gc.collect()
     return {
         "tables": tables,
         "count": len(tables),
@@ -144,6 +150,10 @@ async def extract_table_compat(file: UploadFile = File(...)):
     start = time.time()
     tables = extract_tables(img)
     elapsed = int((time.time() - start) * 1000)
+
+    # Free image memory before further processing
+    del img, content
+    gc.collect()
 
     if not tables:
         raise HTTPException(

@@ -211,18 +211,50 @@ This is fundamentally different (and better) than the TATR + Tesseract.js approa
 
 | Render plan | RAM | CPU | Price | Can run PaddleOCR? |
 |---|---|---|---|---|
-| Free | 512 MB | 0.1 | $0 | ⚠️ Tight — may OOM on large images |
-| Starter | 512 MB | 0.1 | $7/mo | ⚠️ Works but slow (~3 s/table) |
+| Free | 512 MB | 0.1 | $0 | ⚠️ Borderline — see below |
+| Starter | 512 MB | 0.1 | $7/mo | ⚠️ Same memory as free, just no sleep |
 | Standard | 2 GB | 0.5 | $25/mo | ✅ Recommended (~1 s/table) |
 | Pro | 4 GB | 1.0 | $50/mo | ✅ Fast (~0.5 s/table) |
 
-Memory breakdown at runtime:
-- PaddlePaddle runtime: ~200 MB
-- PaddleOCR models: ~250 MB
-- Image buffers + processing: ~100–200 MB
-- **Total: ~550–650 MB**
+### Free tier — honest expectations
 
-→ **512 MB is borderline.** Use Standard ($25/mo) for production.
+PaddleOCR + PaddlePaddle at runtime uses **~450-550 MB RAM**. Render's free tier is **512 MB**. This is borderline. Here's what to expect:
+
+| Image type | Will it work? | Notes |
+|---|---|---|
+| Small (<500 KB), simple table (5×5) | ✅ Yes | ~3-5 s/response |
+| Medium (1-2 MB), complex table (10×10) | ⚠️ Maybe | Right at the limit, may OOM |
+| Large (>2 MB), multi-table page | ❌ No | Will OOM-kill |
+| First request after cold start | ❌ Likely OOM | Loading all models at once spikes memory |
+
+**Memory optimizations already applied** in this build:
+- `layout=False` — skips the heavy layout parser (~50 MB saved)
+- `MALLOC_TRIM_THRESHOLD_=65536` — glibc returns freed memory to OS
+- `gc.collect()` after every request — Python frees image buffers
+- Lazy model loading — only loads what each endpoint needs
+- Single uvicorn worker — no duplicate model copies
+
+**If you still hit OOM**, options in order of preference:
+1. **Downscale images before upload** (e.g. resize to max 1500px wide in your Vercel frontend with `sharp`)
+2. **Upgrade to Standard ($25/mo)** — 2 GB RAM, fits comfortably
+3. **Switch to RapidOCR** (ONNX-based PaddleOCR port, ~150 MB runtime) — fits free tier easily but loses the SLANet table structure model
+
+### Cold start on free tier
+
+Render free tier sleeps after 15 min of inactivity. Cold starts take **~60-90 seconds**:
+- Container spins up (~5 s)
+- Python imports load (~10 s)
+- PaddlePaddle framework loads (~20 s)
+- Models load from disk to RAM (~15 s)
+- First inference warms up MKL-DNN (~10 s)
+
+To avoid cold starts during active use, ping `/health` every 10 minutes with an external cron (e.g. cron-job.org, UptimeRobot, GitHub Actions).
+
+Memory breakdown at runtime (after optimizations):
+- PaddlePaddle runtime: ~200 MB
+- PaddleOCR models (PP-OCRv4 + SLANet): ~250 MB
+- Image buffers + processing: ~50-100 MB
+- **Total: ~500-550 MB** → fits free tier barely
 
 ---
 

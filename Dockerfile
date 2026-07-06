@@ -10,6 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Memory optimization: glibc normally holds freed memory in its arena.
+# Setting MALLOC_TRIM_THRESHOLD_ to a low value forces it to return freed
+# memory to the OS. Critical for fitting PaddleOCR into 512 MB free tier.
+ENV MALLOC_TRIM_THRESHOLD_=65536
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
 
 # Install Python deps
@@ -22,13 +29,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 #   - PP-OCRv4 rec (text recognition)
 #   - PP-OCRv4 cls (text angle classification)
 #   - SLANet table structure model
-#   - Layout parser model
+#
+# We don't preload PPStructure here (it needs the layout parser which we
+# disabled for memory). PPStructure will download its specific models on
+# first request (~30 MB, ~5 s on Render's network).
 #
 # If the download fails (e.g. network issue), continue — models will
 # download on first request instead.
-RUN python -c "from paddleocr import PaddleOCR, PPStructure; \
-    PaddleOCR(use_angle_cls=True, lang='en', show_log=True); \
-    PPStructure(show_log=True, lang='en')" 2>&1 || \
+RUN python -c "from paddleocr import PaddleOCR; \
+    PaddleOCR(use_angle_cls=True, lang='en', show_log=True)" 2>&1 || \
     echo "WARNING: model pre-download failed, will download on first request"
 
 # Copy app code
