@@ -68,14 +68,17 @@ def ocr_bytes(data: bytes, filename: str = "upload.pdf") -> OcrResponse:
         doc.close()
 
         # Run PyMuPDF4LLM — returns markdown with page breaks
-        # Use page_chunks=True to get per-page markdown
+        # Use page_chunks=True to get per-page chunks. NOTE: each chunk is a
+        # dict (keys include "text", "metadata", ...), not a plain string —
+        # pull out the "text" field.
         page_chunks = pymupdf4llm.to_markdown(tmp_path, page_chunks=True)
 
         # Build per-page results
         pages_out: list[PageResult] = []
-        for i, page_md in enumerate(page_chunks):
+        for i, chunk in enumerate(page_chunks):
             if i >= total_pages:
                 break
+            page_md = chunk["text"] if isinstance(chunk, dict) else chunk
             w, h = page_dims[i]
             meta = PageMeta(
                 page_index=i,
@@ -136,7 +139,8 @@ def _ocr_image(data: bytes, filename: str, t0: float) -> OcrResponse:
 
     try:
         page_chunks = pymupdf4llm.to_markdown(tmp_path, page_chunks=True)
-        page_md = page_chunks[0] if page_chunks else ""
+        chunk = page_chunks[0] if page_chunks else ""
+        page_md = chunk["text"] if isinstance(chunk, dict) else chunk
     finally:
         try:
             os.unlink(tmp_path)
