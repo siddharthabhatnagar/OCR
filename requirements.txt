@@ -1,0 +1,21 @@
+# PaddlePaddle CPU + PaddleOCR
+# Note: paddlepaddle is ~150 MB. Combined with PaddleOCR models (~60 MB)
+# and Python deps, total Docker image is ~1.2 GB. This is fine for Render —
+# they have no image size limit, unlike Vercel's 250 MB function cap.
+paddlepaddle==2.6.1
+paddleocr==2.7.3
+opencv-python-headless==4.10.0.84
+
+# FastAPI server
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pydantic==2.9.2
+
+# HTML parsing for table structure (colspan/rowspan reconstruction)
+beautifulsoup4==4.12.3
+lxml==5.3.0
+
+# Image handling
+Pillow==10.4.0
+numpy==1.26.4

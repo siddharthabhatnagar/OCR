@@ -1,87 +1,121 @@
-# Table OCR — Vercel-deployable
+# PaddleOCR Table API — Deploy on Render
 
-Extract tables from images using Microsoft's **Table Transformer (TATR)** for
-table detection and structure recognition, plus **Tesseract.js** for cell-level
-OCR. All inference runs inside the Vercel serverless function — no external
-API calls, no GPU, no Pinecone, no nothing.
+A FastAPI service that runs **PaddleOCR's PP-StructureV2** to extract tables from images. Returns HTML + structured cells (with rowspan/colspan support).
 
-> **One-shot deploy**: `unzip table-ocr-vercel.zip && cd table-ocr-vercel && npm install && vercel`
+Designed as a **drop-in backend** for the Vercel Next.js frontend — same API contract, same response shape.
 
 ---
 
-## Size budget — fits under Vercel's 250 MB limit
+## Why Render instead of Vercel?
 
-| Component                                          | Size     |
-| -------------------------------------------------- | -------- |
-| TATR detection (uint8 ONNX)                        | ~30 MB   |
-| TATR structure recognition (uint8 ONNX)            | ~30 MB   |
-| Tesseract.js worker + `eng.traineddata`            | ~15 MB   |
-| `onnxruntime-node` (bundled w/ transformers.js)    | ~20 MB   |
-| `sharp` native binary                              | ~10 MB   |
-| Next.js runtime + app code                         | ~30 MB   |
-| **Total uncompressed serverless function**         | **~135 MB ✅** |
-
-Models are **not** bundled — they are downloaded to `/tmp` on the first cold
-start, then cached for the lifetime of the warm serverless instance.
+| | Vercel (Next.js) | Render (FastAPI + PaddleOCR) |
+|---|---|---|
+| Max function size | 250 MB | No limit (Docker) |
+| Native C++ libs | ❌ Hard | ✅ Easy (Docker) |
+| PaddlePaddle | ❌ Doesn't fit | ✅ ~150 MB, no problem |
+| Table OCR quality | ⭐⭐⭐ (TATR + Tesseract) | ⭐⭐⭐⭐⭐ (PP-StructureV2) |
+| Cold start | 10–20 s | 5–10 s (models pre-baked) |
+| Cost | Free tier OK | Starter $7/mo recommended |
 
 ---
 
-## Deploy on Vercel
+## Quick deploy
 
-### Option A — Vercel CLI (fastest)
+### Option A — Render Blueprint (one-click)
+
+1. Push this folder to a new GitHub repo.
+2. Go to https://dashboard.render.com/blueprints
+3. Click **New Blueprint Instance** → select your repo.
+4. Render reads `render.yaml` and deploys automatically.
+5. Wait ~5 min for Docker build + model pre-download.
+6. Your API is live at `https://paddle-ocr-table-XXXX.onrender.com`.
+
+### Option B — Manual (Render dashboard)
+
+1. Push this folder to GitHub.
+2. Render dashboard → **New +** → **Web Service**.
+3. Connect your repo.
+4. Settings:
+   - **Runtime**: Docker
+   - **Plan**: Starter ($7/mo) or Standard ($25/mo)
+   - **Dockerfile Path**: `./Dockerfile`
+   - **Health Check Path**: `/health`
+5. Add env vars (optional):
+   - `PADDLE_LANG` = `en` (or `ch`, `french`, `german`, `korean`, `japan`, ...)
+   - `CORS_ORIGINS` = `https://your-vercel-app.vercel.app` (restrict access)
+6. Click **Create Web Service**. Wait ~5 min.
+
+### Option C — Local Docker (for testing)
 
 ```bash
-npm i -g vercel
-unzip table-ocr-vercel.zip
-cd table-ocr-vercel
-npm install
-vercel        # follow prompts; accept all defaults
-vercel --prod  # promote to production
+cd paddle-ocr-render
+docker build -t paddle-ocr-table .
+docker run -p 8000:8000 paddle-ocr-table
+
+# Test it
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/api/extract-table \
+  -F "file=@some-table.png" | python -m json.tool
 ```
 
-### Option B — GitHub import
-
-1. Push the unzipped folder to a new GitHub repo.
-2. Vercel dashboard → **New Project** → import the repo.
-3. Framework preset: **Next.js** (auto-detected).
-4. No env vars required. Click **Deploy**.
-
-That's it. Vercel will read `vercel.json` (60 s timeout, 1 GB RAM) and
-`next.config.mjs` (native packages externalized).
-
 ---
 
-## Local dev
+## API endpoints
 
-```bash
-npm install
-npm run dev
-# open http://localhost:3000
+### `GET /health`
+```json
+{ "status": "ok", "service": "paddle-ocr-table", "models_loaded": true, "language": "en" }
 ```
 
-First request triggers a model download (~75 MB total) into your local HF
-cache. Subsequent requests are fast.
+### `GET /`
+Returns endpoint listing.
 
----
+### `GET /docs`
+Interactive Swagger UI — upload images and test directly in the browser.
 
-## Usage
+### `POST /ocr`
+Plain text OCR. Returns every text line with bounding box + confidence.
 
-1. Open the deployed URL.
-2. Drag a PNG/JPEG/WebP image of a table onto the upload zone (max 4 MB).
-3. Click **Extract Table**.
-4. See the rendered HTML table + raw JSON cells.
+**Request**: `multipart/form-data` with `file` field (PNG/JPEG/WebP/BMP/TIFF, max 10 MB)
 
-First request after a cold start takes ~10–20 s (model download + worker
-init). Subsequent requests on the warm instance take 1–5 s, depending on
-table size.
+**Response**:
+```json
+{
+  "items": [
+    {
+      "text": "Hello World",
+      "confidence": 0.98,
+      "bbox": { "xmin": 10, "ymin": 20, "xmax": 200, "ymax": 50 }
+    }
+  ],
+  "count": 1,
+  "elapsed_ms": 120
+}
+```
 
----
+### `POST /table`
+Full table OCR. Returns all tables found in the image.
 
-## API
+**Response**:
+```json
+{
+  "tables": [
+    {
+      "bbox": [10, 20, 980, 760],
+      "html": "<html><body><table>...</table></body></html>",
+      "cell_bbox": [[...], [...]]
+    }
+  ],
+  "count": 1,
+  "elapsed_ms": 850
+}
+```
 
-### `POST /api/extract-table`
+### `POST /api/extract-table` ← Vercel drop-in
 
-**Body**: `multipart/form-data` with a field `file` containing the image.
+Same response shape as the original Vercel Next.js endpoint. **This is the one your frontend calls.**
+
+**Request**: `multipart/form-data` with `file` field
 
 **Response** (200):
 ```json
@@ -89,158 +123,219 @@ table size.
   "rows": 5,
   "cols": 3,
   "cells": [
-    { "text": "Name",   "row": 0, "col": 0 },
-    { "text": "Age",    "row": 0, "col": 1 },
-    { "text": "City",   "row": 0, "col": 2 },
-    { "text": "Alice",  "row": 1, "col": 0 }
+    { "text": "Name",   "row": 0, "col": 0, "rowspan": 1, "colspan": 1 },
+    { "text": "Age",    "row": 0, "col": 1, "rowspan": 1, "colspan": 1 },
+    { "text": "City",   "row": 0, "col": 2, "rowspan": 1, "colspan": 1 },
+    { "text": "Alice",  "row": 1, "col": 0, "rowspan": 1, "colspan": 1 }
   ],
-  "html": "<table><tr><th>Name</th>…</tr></table>",
-  "elapsed_ms": 4321,
-  "table_bbox": { "xmin": 12, "ymin": 34, "xmax": 980, "ymax": 760 }
+  "html": "<table><tr><td>Name</td>...</tr></table>",
+  "elapsed_ms": 850,
+  "table_bbox": { "xmin": 10, "ymin": 20, "xmax": 980, "ymax": 760 }
 }
 ```
 
-**Errors** (400 / 413 / 500): `{ "error": "human-readable message" }`
-
-### `GET /api/extract-table`
-Returns endpoint metadata — useful for health checks.
-
----
-
-## Configuration (optional env vars)
-
-| Variable               | Default                                                            | Description                              |
-| ---------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
-| `DETECTION_MODEL_ID`   | `Xenova/table-transformer-detection`                               | HF repo for the detection stage          |
-| `STRUCTURE_MODEL_ID`   | `Xenova/table-transformer-structure-recognition-v1.1-all`          | HF repo for the structure stage          |
-| `TESSERACT_LANG`       | `eng`                                                              | Tesseract language code (e.g. `eng+fra`) |
-
-Set these in `vercel env` or the project dashboard.
+**Errors**:
+- `400` — unsupported file type
+- `413` — file > 10 MB
+- `422` — no table detected in image
+- `500` — internal error (check Render logs)
 
 ---
 
-## How it works
+## Wire it up to your Vercel frontend
+
+In your Next.js project, edit `app/page.tsx`:
+
+```tsx
+// Change this line:
+const res = await fetch('/api/extract-table', {
+
+// To this:
+const OCR_API_URL = process.env.NEXT_PUBLIC_OCR_API_URL || '/api/extract-table';
+const res = await fetch(OCR_API_URL, {
+  method: 'POST',
+  body: form,
+});
+```
+
+Then set the env var on Vercel:
+```bash
+vercel env add NEXT_PUBLIC_OCR_API_URL production
+# Paste: https://paddle-ocr-table-XXXX.onrender.com
+vercel --prod
+```
+
+You can also **delete** the Vercel API route (`app/api/extract-table/route.ts`) and the `lib/` folder — Vercel now just hosts the static UI, Render does the heavy lifting.
+
+---
+
+## How PaddleOCR's table pipeline works
 
 ```
-image bytes
-    │
-    ▼
-[sharp] strip alpha → raw RGB
-    │
-    ▼
-[transformers.js] TATR detection (object-detection)
-    │  → table bbox
-    ▼
-[sharp] crop to table bbox
-    │
-    ▼
-[transformers.js] TATR structure recognition (object-detection)
-    │  → rows, columns, header rows (sorted)
-    ▼
-for each (row, col) cell:
-    [sharp] extract cell PNG
-    [tesseract.js] OCR the cell → text
-    │
-    ▼
-build cells[] + HTML table
-    │
-    ▼
+image
+  │
+  ▼
+[Layout parser]  →  detects regions (table, figure, title, text)
+  │
+  ▼ table region crop
+  │
+[SLANet table structure]  →  generates HTML with <tr>/<td> + colspan/rowspan
+  │
+  ▼
+[PP-OCRv4]  →  recognizes text inside each cell
+  │
+  ▼
+HTML table with text content
+  │
+  ▼
+[BeautifulSoup parser]  →  structured cells[] with row/col mapping
+  │
+  ▼
 JSON response
 ```
 
----
+This is fundamentally different (and better) than the TATR + Tesseract.js approach:
 
-## Limitations & gotchas
-
-- **4 MB upload cap** — Vercel serverless body limit is 4.5 MB. For larger
-  images, downscale first or upload via [Vercel Blob](https://vercel.com/docs/storage/vercel-blob)
-  and POST the URL.
-- **60 s timeout** on Hobby plan. Complex tables with many cells may exceed
-  this — upgrade to Pro for 300 s.
-- **CPU-only** — no GPU on Vercel serverless. Inference is ~5–20× slower than
-  a GPU box. A 5×5 table typically takes 2–4 s on a warm instance.
-- **Cold start** — first request after deployment (or after the instance goes
-  idle, ~5 min on Hobby) downloads ~75 MB of weights to `/tmp`. Be patient.
-- **Header detection** — TATR tags the topmost row(s) as `row header`. The
-  pipeline renders these as `<th>`. If your table has no header, the first
-  row is still rendered as `<th>` — harmless.
-- **Spanning cells** — TATR emits `spanning cell` labels for merged cells;
-  the current pipeline does **not** reconstruct `rowspan`/`colspan`. PRs
-  welcome.
-- **Non-English text** — set `TESSERACT_LANG` to e.g. `fra`, `deu`, `chi_sim`
-  etc. Multiple languages: `eng+fra`.
+| Aspect | TATR + Tesseract | PaddleOCR PP-Structure |
+|---|---|---|
+| Table structure model | Detects rows/cols separately | Single end-to-end model |
+| Merged cells | ❌ Not supported | ✅ colspan/rowspan |
+| Cell OCR | Tesseract (per-cell, slow) | PP-OCRv4 (batch, fast) |
+| Skewed tables | ❌ Fails | ✅ Handles rotation |
+| Languages | Tesseract packs (~5 MB each) | 80+ PaddleOCR langs |
+| Speed (5×5 table) | ~5 s | ~1 s |
 
 ---
 
-## Models used
+## Resource usage
 
-| Stage    | Original (PyTorch)                                                   | ONNX export (used here)                                                |
-| -------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Detect   | [`microsoft/table-transformer-detection`](https://huggingface.co/microsoft/table-transformer-detection) | [`Xenova/table-transformer-detection`](https://huggingface.co/Xenova/table-transformer-detection) |
-| Structure | [`microsoft/table-transformer-structure-recognition-v1.1-all`](https://huggingface.co/microsoft/table-transformer-structure-recognition-v1.1-all) | [`Xenova/table-transformer-structure-recognition-v1.1-all`](https://huggingface.co/Xenova/table-transformer-structure-recognition-v1.1-all) |
-| OCR      | —                                                                    | `tesseract.js` (LSTM, English)                                          |
+| Render plan | RAM | CPU | Price | Can run PaddleOCR? |
+|---|---|---|---|---|
+| Free | 512 MB | 0.1 | $0 | ⚠️ Tight — may OOM on large images |
+| Starter | 512 MB | 0.1 | $7/mo | ⚠️ Works but slow (~3 s/table) |
+| Standard | 2 GB | 0.5 | $25/mo | ✅ Recommended (~1 s/table) |
+| Pro | 4 GB | 1.0 | $50/mo | ✅ Fast (~0.5 s/table) |
 
-All three run inside the same serverless function via `onnxruntime-node`
-(bundled with `@huggingface/transformers` v3) and the Tesseract WASM core.
+Memory breakdown at runtime:
+- PaddlePaddle runtime: ~200 MB
+- PaddleOCR models: ~250 MB
+- Image buffers + processing: ~100–200 MB
+- **Total: ~550–650 MB**
+
+→ **512 MB is borderline.** Use Standard ($25/mo) for production.
 
 ---
 
-## File layout
+## Configuration
+
+All via env vars on Render:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8000` | Set automatically by Render |
+| `PADDLE_LANG` | `en` | OCR language. Options: `en`, `ch`, `french`, `german`, `korean`, `japan`, `arabic`, `hindi`, `italian`, `portuguese`, `russian`, `spanish`, ... |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed origins. Set to your Vercel URL in production. |
+
+Set them in Render dashboard → **Environment** tab, or in `render.yaml`.
+
+---
+
+## Local dev (without Docker)
+
+```bash
+cd paddle-ocr-render
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+First run downloads ~60 MB of models to `~/.paddleocr/`.
+
+---
+
+## Testing
+
+```bash
+# Health check
+curl https://your-app.onrender.com/health
+
+# Plain OCR
+curl -X POST https://your-app.onrender.com/ocr \
+  -F "file=@receipt.png" | jq .
+
+# Table OCR (Vercel-compatible)
+curl -X POST https://your-app.onrender.com/api/extract-table \
+  -F "file=@table.png" | jq .
+
+# Or just open the Swagger UI in your browser:
+open https://your-app.onrender.com/docs
+```
+
+---
+
+## File structure
 
 ```
-table-ocr-vercel/
-├── package.json
-├── next.config.mjs          # externalizes native deps
-├── vercel.json              # 60 s timeout, 1 GB RAM
-├── tsconfig.json
-├── .env.example             # optional overrides
-├── .gitignore
-├── README.md                # this file
+paddle-ocr-render/
 ├── app/
-│   ├── layout.tsx
-│   ├── page.tsx             # upload UI + result rendering
-│   ├── globals.css
-│   └── api/
-│       └── extract-table/
-│           └── route.ts     # POST handler
-└── lib/
-    ├── models.ts            # lazy model singletons + OCR worker
-    └── pipeline.ts          # detect → crop → structure → cell OCR → HTML
+│   ├── __init__.py
+│   ├── main.py            # FastAPI endpoints
+│   ├── ocr.py             # PaddleOCR + PPStructure wrappers (lazy singletons)
+│   └── table_parser.py    # HTML → structured cells (handles colspan/rowspan)
+├── Dockerfile             # Python 3.10 + system deps + model pre-download
+├── requirements.txt
+├── render.yaml            # Render Blueprint (one-click deploy)
+├── start.sh               # uvicorn launcher
+├── .dockerignore
+└── README.md              # this file
 ```
-
----
-
-## License
-
-MIT for the wrapper code in this repo.
-
-Model weights follow their original licenses:
-- Microsoft Table Transformer — MIT
-- Xenova ONNX exports — MIT
-- Tesseract LSTM data — Apache-2.0
 
 ---
 
 ## Troubleshooting
 
-**`Error: ... onnxruntime-node ... native module not found`**
-Make sure `next.config.mjs` lists `onnxruntime-node` in
-`serverExternalPackages`. It is — re-run `npm install` if you edited
-`package.json`.
+**Build fails with `ModuleNotFoundError: No module named 'paddle'`**
+PaddlePaddle wheel is platform-specific. The Dockerfile uses `python:3.10-slim` on Linux x86_64, which has pre-built wheels. If you're on Apple Silicon locally, use `--platform linux/amd64` when building Docker.
 
-**First deploy fails with `250 MB exceeded`**
-Run `vercel build --debug` locally and check the bundle. The most common
-culprit is accidentally importing a server-side module in client code.
+**First request is slow (30+ seconds)**
+Models are downloading. The Dockerfile pre-downloads them during build, but if that step failed (network issue), they download on first request. Check the build logs for "WARNING: model pre-download failed".
 
-**Cold start is slow (30 s+)**
-That's the model download. After the first request, the warm instance caches
-weights in `/tmp` and subsequent requests are fast. To keep the instance
-warm, ping `/api/extract-table` (GET) every 4 minutes with a cron job
-(e.g. Upstash QStash, GitHub Actions, cron-job.org).
+**`OOMKilled` or 502 errors on large images**
+512 MB RAM is tight. Either:
+- Upgrade to Standard plan (2 GB)
+- Downscale images before uploading (`sharp` in the Vercel frontend, or `Pillow` here)
 
-**OCR returns garbage for non-Latin text**
-Set `TESSERACT_LANG=chi_sim` (or `jpn`, `kor`, `ara`, etc.) and redeploy.
+**CORS error in browser console**
+Set `CORS_ORIGINS=https://your-vercel-app.vercel.app` on Render. Or leave as `*` for prototyping.
 
-**Table is detected but cells are empty**
-The structure recognition likely failed. Try a higher-resolution, higher-
-contrast image. TATR struggles with screenshots of dark-themed UIs.
+**OCR returns Chinese text as garbage**
+Set `PADDLE_LANG=ch` on Render. For mixed Chinese+English, use `PADDLE_LANG=ch` (the `ch` model includes English).
+
+**Table HTML is empty**
+PP-Structure didn't detect a table. Try:
+- Higher resolution image (at least 500px wide for the table)
+- Better contrast (dark text on white background)
+- Crop to just the table region
+
+**Render deployment is slow (~5 min)**
+Docker build installs paddlepaddle (~150 MB) + pre-downloads models (~60 MB). First build is slow, subsequent builds use Docker layer cache and are faster.
+
+---
+
+## Cost summary
+
+| Component | Monthly cost |
+|---|---|
+| Vercel (frontend + static) | $0 (Hobby) |
+| Render Starter (512 MB) | $7 |
+| Render Standard (2 GB, recommended) | $25 |
+| Domain (optional) | $10/yr |
+
+**Total: $7–25/mo** for a production-ready table OCR service.
+
+---
+
+## License
+
+MIT for the wrapper code. PaddleOCR and PaddlePaddle are Apache-2.0.

@@ -1,0 +1,25 @@
+# Render Blueprint — one-click deploy
+# After pushing this repo to GitHub, go to:
+#   https://dashboard.render.com/blueprints
+# and connect your repo. Render will read this file automatically.
+
+services:
+  - type: web
+    name: paddle-ocr-table
+    runtime: docker
+    # Plan options:
+    #   free    — 512 MB, sleeps after 15 min idle. Tight for PaddleOCR.
+    #   starter — 512 MB, no sleep. $7/mo. Minimum recommended.
+    #   standard — 2 GB, 0.5 CPU. $25/mo. Recommended for production.
+    plan: starter
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PADDLE_LANG
+        value: en
+      # Optional: restrict CORS to your Vercel frontend URL
+      # - key: CORS_ORIGINS
+      #   value: https://your-app.vercel.app
