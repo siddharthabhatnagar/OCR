@@ -4,16 +4,12 @@
   "buildCommand": "pip install -r requirements.txt",
   "installCommand": "echo 'skip'",
   "functions": {
-    "api/**/*.py": {
+    "api/index.py": {
       "memory": 1024,
       "maxDuration": 60
     }
   },
   "routes": [
-    { "src": "/", "dest": "/api/index.py" },
-    { "src": "/health", "dest": "/api/health.py" },
-    { "src": "/ocr", "dest": "/api/ocr.py" },
-    { "src": "/docs", "dest": "/api/docs.py" },
-    { "src": "/openapi.json", "dest": "/api/openapi.py" }
+    { "src": "/(.*)", "dest": "/api/index.py" }
   ]
 }

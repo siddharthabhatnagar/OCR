@@ -5,6 +5,10 @@
 # Core Docling package (pulls in torch CPU, transformers, etc.)
 docling==2.7.0
 
+# Web framework for the ASGI app (Vercel Python runtime expects `app` variable)
+starlette==0.41.3
+python-multipart==0.0.20
+
 # PDF/image processing
 PyMuPDF==1.24.14
 Pillow==11.0.0
