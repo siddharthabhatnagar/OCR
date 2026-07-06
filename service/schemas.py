@@ -1,5 +1,6 @@
 """
-Response schemas for the OCR API.
+Pydantic response schemas — matches the Unlimited-OCR API shape exactly
+so the same RAG client works with both.
 """
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-ElementType = Literal["text", "table", "equation", "figure", "heading"]
+ElementType = Literal["text", "table", "equation", "figure", "heading", "list"]
 
 
 class BoundingBox(BaseModel):
@@ -52,5 +53,4 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "loading", "error"]
     model_loaded: bool
     device: str
-    hf_space: bool
     uptime_s: int

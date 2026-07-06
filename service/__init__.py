@@ -1,1 +1,1 @@
-"""Unlimited-OCR service package."""
+"""Service package for Docling OCR API."""

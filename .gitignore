@@ -1,0 +1,19 @@
+# Dependencies
+__pycache__/
+*.pyc
+*.pyo
+
+# Vercel
+.vercel/
+
+# Local secrets
+.env
+.env.local
+
+# Samples (for testing)
+samples/
+
+# IDE
+.vscode/
+.idea/
+*.swp
