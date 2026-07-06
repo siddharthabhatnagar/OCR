@@ -118,7 +118,12 @@ export async function detectTables(
   dims: { W: number; H: number }
 ): Promise<Box[]> {
   const model = await getDetector();
-  const image = new RawImage(raw, dims.W, dims.H, 3);
+  const image = new RawImage(
+    new Uint8ClampedArray(raw.buffer, raw.byteOffset, raw.byteLength),
+    dims.W,
+    dims.H,
+    3
+  );
   const out = await model(image);
   return normalizeOutput(out);
 }
@@ -128,7 +133,12 @@ export async function recognizeStructure(
   dims: { W: number; H: number }
 ): Promise<Box[]> {
   const model = await getStructureRecognizer();
-  const image = new RawImage(raw, dims.W, dims.H, 3);
+  const image = new RawImage(
+    new Uint8ClampedArray(raw.buffer, raw.byteOffset, raw.byteLength),
+    dims.W,
+    dims.H,
+    3
+  );
   const out = await model(image);
   return normalizeOutput(out);
 }
